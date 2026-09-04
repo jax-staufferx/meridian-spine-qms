@@ -228,6 +228,46 @@ def transition_capa(
 # ---- Complaints / MDR reportability ----
 
 
+def _run_mdr_evaluation(complaint: models.Complaint, db: Session) -> None:
+    """Run the deterministic MDR engine against a complaint's current field
+    values, store the result on the complaint, and append a snapshot to
+    ComplaintEvaluationLog. Shared by complaint creation (auto-evaluated
+    immediately) and the standalone /evaluate endpoint (re-evaluated after
+    fields are updated)."""
+    result = evaluate_mdr(
+        injury_severity=complaint.injury_severity,
+        device_causality=complaint.device_causality,
+        device_malfunctioned=complaint.device_malfunctioned,
+        recurrence_would_be_dangerous=complaint.recurrence_would_be_dangerous,
+        remedial_action_taken=complaint.remedial_action_taken,
+        date_received=complaint.date_received,
+    )
+
+    now = datetime.utcnow()
+    complaint.mdr_decision = result["mdr_decision"]
+    complaint.mdr_deadline_days = result["mdr_deadline_days"]
+    complaint.mdr_due_date = result["mdr_due_date"]
+    complaint.mdr_reasoning = result["mdr_reasoning"]
+    complaint.mdr_evaluated_date = now
+
+    db.add(
+        models.ComplaintEvaluationLog(
+            complaint_id=complaint.complaint_id,
+            evaluated_date=now,
+            injury_occurred=complaint.injury_occurred,
+            injury_severity=complaint.injury_severity,
+            device_malfunctioned=complaint.device_malfunctioned,
+            device_causality=complaint.device_causality,
+            recurrence_would_be_dangerous=complaint.recurrence_would_be_dangerous,
+            remedial_action_taken=complaint.remedial_action_taken,
+            mdr_decision=result["mdr_decision"],
+            mdr_deadline_days=result["mdr_deadline_days"],
+            mdr_due_date=result["mdr_due_date"],
+            mdr_reasoning=result["mdr_reasoning"],
+        )
+    )
+
+
 @app.post("/complaints", response_model=schemas.ComplaintOut, status_code=201)
 def create_complaint(payload: schemas.ComplaintCreate, db: Session = Depends(get_db)):
     if not payload.complainant.strip():
@@ -262,6 +302,8 @@ def create_complaint(payload: schemas.ComplaintCreate, db: Session = Depends(get
         remedial_action_taken=payload.remedial_action_taken,
     )
     db.add(complaint)
+    db.flush()  # assigns complaint.complaint_id, needed by the log FK below
+    _run_mdr_evaluation(complaint, db)
     db.commit()
     db.refresh(complaint)
     return complaint
@@ -329,39 +371,7 @@ def evaluate_complaint(
             raise HTTPException(status_code=404, detail=f"CAPA {payload.capa_id} not found")
         complaint.capa_id = payload.capa_id
 
-    result = evaluate_mdr(
-        injury_severity=complaint.injury_severity,
-        device_causality=complaint.device_causality,
-        device_malfunctioned=complaint.device_malfunctioned,
-        recurrence_would_be_dangerous=complaint.recurrence_would_be_dangerous,
-        remedial_action_taken=complaint.remedial_action_taken,
-        date_received=complaint.date_received,
-    )
-
-    now = datetime.utcnow()
-    complaint.mdr_decision = result["mdr_decision"]
-    complaint.mdr_deadline_days = result["mdr_deadline_days"]
-    complaint.mdr_due_date = result["mdr_due_date"]
-    complaint.mdr_reasoning = result["mdr_reasoning"]
-    complaint.mdr_evaluated_date = now
-
-    db.add(
-        models.ComplaintEvaluationLog(
-            complaint_id=complaint.complaint_id,
-            evaluated_date=now,
-            injury_occurred=complaint.injury_occurred,
-            injury_severity=complaint.injury_severity,
-            device_malfunctioned=complaint.device_malfunctioned,
-            device_causality=complaint.device_causality,
-            recurrence_would_be_dangerous=complaint.recurrence_would_be_dangerous,
-            remedial_action_taken=complaint.remedial_action_taken,
-            mdr_decision=result["mdr_decision"],
-            mdr_deadline_days=result["mdr_deadline_days"],
-            mdr_due_date=result["mdr_due_date"],
-            mdr_reasoning=result["mdr_reasoning"],
-        )
-    )
-
+    _run_mdr_evaluation(complaint, db)
     db.commit()
     db.refresh(complaint)
     return complaint
