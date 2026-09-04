@@ -6,6 +6,7 @@ import {
   alertBox,
   api,
   capaBadge,
+  clampText,
   el,
   emptyState,
   fmtDate,
@@ -81,7 +82,7 @@ export async function renderCapaList(container, initialStatus) {
             capa.source_type,
             relatedLink(capa),
             fmtDate(capa.opened_date),
-            el("span", { class: "truncate", title: capa.description, text: capa.description }),
+            clampText(capa.description),
           ])
         )
   );

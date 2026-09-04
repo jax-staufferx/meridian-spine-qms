@@ -164,6 +164,32 @@ export function emptyState(message) {
   return el("p", { class: "empty-state", text: message });
 }
 
+/** Clamped text with a "Read more" toggle for long descriptions.
+ *  Short texts render plain; long ones collapse to `lines` lines with a
+ *  button that expands the full text in place (no scroll needed). */
+export function clampText(text, { lines = 2 } = {}) {
+  const value = text || "—";
+  if (value.length <= lines * 45) {
+    return el("span", { class: "clamp-text", text: value });
+  }
+  const body = el("span", { class: `clamp-text clamp-collapsed clamp-${lines}` });
+  body.textContent = value;
+  const btn = el("button", {
+    class: "btn-text read-more-btn",
+    type: "button",
+    text: "Read more",
+    "aria-expanded": "false",
+    onclick: () => {
+      const expanded = btn.getAttribute("aria-expanded") !== "true";
+      btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+      body.classList.toggle("clamp-expanded", expanded);
+      body.classList.toggle("clamp-collapsed", !expanded);
+      btn.textContent = expanded ? "Show less" : "Read more";
+    },
+  });
+  return el("span", { class: "clamp-wrap" }, body, btn);
+}
+
 export function pageHeader(title, lede, ...actions) {
   return el(
     "div",

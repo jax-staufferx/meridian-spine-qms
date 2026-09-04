@@ -5,6 +5,7 @@ import {
   SERIOUS_INJURY_DEFINITION,
   alertBox,
   api,
+  clampText,
   dueChip,
   el,
   emptyState,
@@ -108,7 +109,7 @@ export async function renderComplaintList(container, initialFilter) {
             fmtDate(c.date_received),
             c.serial_number || "—",
             el("span", { class: "truncate", title: c.complainant, text: c.complainant }),
-            el("span", { class: "truncate", title: c.description, text: c.description }),
+            clampText(c.description),
           ])
         )
   );
@@ -270,7 +271,7 @@ function reportCard(c) {
     "section",
     { class: "card" },
     el("h2", { class: "card-title", text: "Reported issue" }),
-    el("p", { class: "doc-value", text: c.description })
+    clampText(c.description, { lines: 3 })
   );
 }
 
